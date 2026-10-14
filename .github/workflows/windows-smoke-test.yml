@@ -7,8 +7,14 @@ name: Windows install smoke test
 # and import it without crashing, which is exactly what broke before the
 # uvloop fix (see fix/windows-uvloop) -- pip install itself failed, and
 # importing parallax.p2p.utils failed even if you worked around that by
-# hand. The pure-Python scheduler test suite (no GPU/MLX dependency) also
-# runs here as a real, broader health check.
+# hand.
+#
+# Deliberately doesn't run tests/scheduler_tests/: tests/conftest.py
+# unconditionally imports parallax.utils.utils -> mlx.core for every test
+# under tests/, and mlx's own Windows wheel fails to load its native DLL
+# on this runner ("DLL load failed while importing core"). That's a
+# separate, pre-existing issue in the mlx package itself, unrelated to
+# the uvloop fix this workflow exists to verify.
 on:
   pull_request:
     branches: [main]
@@ -17,12 +23,11 @@ on:
       - 'src/parallax/p2p/**'
       - 'src/backend/main.py'
       - 'src/parallax/server/node_chat_http_server.py'
-      - 'src/scheduling/**'
       - 'pyproject.toml'
   workflow_dispatch:
 
 jobs:
-  windows-import-and-scheduler-tests:
+  windows-import-smoke-test:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -31,19 +36,15 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install core package (no gpu/mac extras -- those need a real
-          GPU/Apple Silicon this runner doesn't have)
+      - name: Install core package
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[dev]"
+          pip install -e .
 
-      - name: Exercise the exact fix -- p2p.utils must import cleanly and
-          correctly report uvloop as unavailable on Windows
+      - name: Exercise the uvloop fallback fix in parallax.p2p.utils
         run: |
-          python -c "import parallax.p2p.utils as u; assert u._HAS_UVLOOP is False, 'expected no uvloop on Windows'; loop = u.switch_to_uvloop(); print('OK:', type(loop).__module__ + '.' + type(loop).__name__); loop.close()"
+          python -c "import parallax.p2p.utils as u; assert u._HAS_UVLOOP is False, 'expected no uvloop on Windows'; loop = u.switch_to_uvloop(); print('OK', type(loop).__module__, type(loop).__name__); loop.close()"
 
-      - name: Sanity-check the CLI entry point also imports cleanly
-        run: python -c "import parallax.cli; print('OK: parallax.cli imports')"
-
-      - name: Run the pure-Python scheduler test suite
-        run: pytest tests/scheduler_tests/ -v
+      - name: Sanity check the CLI entry point imports
+        run: |
+          python -c "import parallax.cli; print('OK parallax.cli imports')"
