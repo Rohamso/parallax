@@ -1,0 +1,49 @@
+name: Windows install smoke test
+
+# Separate from ci.yml on purpose: the GPU (sglang/vllm) and Mac (mlx)
+# backends have no Windows wheels at all -- that's an upstream limitation
+# in those projects, not something this repo can fix. This job only
+# verifies what Windows *can* actually do today: install the core package
+# and import it without crashing, which is exactly what broke before the
+# uvloop fix (see fix/windows-uvloop) -- pip install itself failed, and
+# importing parallax.p2p.utils failed even if you worked around that by
+# hand. The pure-Python scheduler test suite (no GPU/MLX dependency) also
+# runs here as a real, broader health check.
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/windows-smoke-test.yml'
+      - 'src/parallax/p2p/**'
+      - 'src/backend/main.py'
+      - 'src/parallax/server/node_chat_http_server.py'
+      - 'src/scheduling/**'
+      - 'pyproject.toml'
+  workflow_dispatch:
+
+jobs:
+  windows-import-and-scheduler-tests:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install core package (no gpu/mac extras -- those need a real
+          GPU/Apple Silicon this runner doesn't have)
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Exercise the exact fix -- p2p.utils must import cleanly and
+          correctly report uvloop as unavailable on Windows
+        run: |
+          python -c "import parallax.p2p.utils as u; assert u._HAS_UVLOOP is False, 'expected no uvloop on Windows'; loop = u.switch_to_uvloop(); print('OK:', type(loop).__module__ + '.' + type(loop).__name__); loop.close()"
+
+      - name: Sanity-check the CLI entry point also imports cleanly
+        run: python -c "import parallax.cli; print('OK: parallax.cli imports')"
+
+      - name: Run the pure-Python scheduler test suite
+        run: pytest tests/scheduler_tests/ -v
