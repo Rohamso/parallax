@@ -35,6 +35,12 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -e ".[dev]"
+          # tests/conftest.py unconditionally imports parallax.utils.utils,
+          # which imports mlx.core -- unrelated to the uvloop fix, but
+          # needed just to collect tests/scheduler_tests at all. mlx does
+          # publish win_amd64 wheels (CPU-only there; its GPU path is
+          # Apple Metal-specific), so this installs fine here.
+          pip install mlx
 
       - name: Exercise the uvloop fallback fix in parallax.p2p.utils
         run: |
