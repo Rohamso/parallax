@@ -31,21 +31,19 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install core package (no gpu/mac extras -- those need a real
-          GPU/Apple Silicon this runner doesn't have)
+      - name: Install core package
         run: |
           python -m pip install --upgrade pip
           pip install -e ".[dev]"
 
-      - name: Exercise the exact fix -- p2p.utils must import cleanly and
-          correctly report uvloop as unavailable on Windows
+      - name: Exercise the uvloop fallback fix in parallax.p2p.utils
         run: |
-          python -c "import parallax.p2p.utils as u; assert u._HAS_UVLOOP is False, 'expected no uvloop on Windows'; loop = u.switch_to_uvloop(); print('OK:', type(loop).__module__ + '.' + type(loop).__name__); loop.close()"
+          python -c "import parallax.p2p.utils as u; assert u._HAS_UVLOOP is False, 'expected no uvloop on Windows'; loop = u.switch_to_uvloop(); print('OK', type(loop).__module__, type(loop).__name__); loop.close()"
 
-      - name: Sanity-check the CLI entry point also imports cleanly
-        run: python -c "import parallax.cli; print('OK: parallax.cli imports')"
+      - name: Sanity check the CLI entry point imports
+        run: |
+          python -c "import parallax.cli; print('OK parallax.cli imports')"
 
       - name: Run the pure-Python scheduler test suite
-        run: pytest tests/scheduler_tests/ -v
-
-# trigger
+        run: |
+          pytest tests/scheduler_tests/ -v
